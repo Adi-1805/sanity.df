@@ -1,0 +1,61 @@
+id,name,state,city,zipcode
+1,Alice Brown,,New York City,10001
+2,John Doe,,LA,90002
+3,Alice Brown,NY,New York,10001
+4,Eve White,,ny,10001
+5,Alice Brown,,L.A.,90001
+6,John Doe,,New York,10002
+7,Jane Smith,,ny,10001
+8,Jane Smith,,NY City,10002
+9,Bob Johnson,,,10002
+10,Eve White,,Los Angeles,90001
+11,Alice Brown,,,90002
+12,Charlie Davis,,City of Angels,90001
+13,Bob Johnson,CA,L.A.,90001
+14,John Doe,,la,90001
+15,Charlie Davis,,Los Angeles,90002
+16,Bob Johnson,,Los Angeles ,90001
+17,Alice Brown,,NY City,10002
+18,Jane Smith,CA,Los Angeles ,90001
+19,Alice Brown,,City of Angels,90001
+20,Alice Brown,,,10001
+21,Alice Brown,,Los Angeles ,90001
+22,John Doe,,ny,10001
+23,John Doe,NY,New York,10002
+24,Eve White,,New York City,10001
+25,Eve White,,New York,10002
+26,Alice Brown,,Los Angeles,90002
+27,Bob Johnson,,New York City,10001
+28,Jane Smith,,New York,10001
+29,John Doe,,New York,10001
+30,Bob Johnson,NY,Big Apple,10001
+31,Jane Smith,,la,90001
+32,John Doe,,N.Y.,10001
+33,Alice Brown,,LA,90002
+34,Bob Johnson,,LA,90002
+35,Alice Brown,,Los Angeles ,90001
+36,Bob Johnson,,City of Angels,90001
+37,Jane Smith,,New York,10002
+38,Charlie Davis,,Los Angeles,90002
+39,John Doe,,City of Angels,90001
+40,Bob Johnson,,L.A.,90001
+41,Jane Smith,,New York,10002
+42,Eve White,,Los Angeles,90002
+43,Jane Smith,,ny,10001
+44,Charlie Davis,CA,Los Angeles,90002
+45,John Doe,NY,Big Apple,10001
+46,Charlie Davis,,Los Angeles,90002
+47,Charlie Davis,,New York,10002
+48,Bob Johnson,NY,N.Y.,10001
+49,Eve White,,New York,10002
+50,Charlie Davis,NY,New York,10002
+51,Eve White,NY,NY City,10002
+52,Charlie Davis,,New York City,10001
+53,Charlie Davis,,New York,10002
+54,John Doe,,New York,10001
+55,Bob Johnson,CA,City of Angels,90001
+56,Charlie Davis,,New York,10002
+57,Jane Smith,,L.A.,90001
+58,John Doe,,L.A.,90001
+59,Bob Johnson,CA,Los Angeles,90002
+60,John Doe,,,90002

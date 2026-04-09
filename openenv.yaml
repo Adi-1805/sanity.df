@@ -1,0 +1,21 @@
+spec_version: 1
+name: data_clean_transform
+description: "AI Data Cleaning & Transformation Environment"
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+tasks:
+  - id: task1
+    name: "Task 1: Basic Cleansing"
+    description: "Remove duplicates and rows with missing critical fields (id, email)."
+    difficulty: easy
+  - id: task2
+    name: "Task 2: Formatting & Type Casting"
+    description: "Standardize date formats and fix numeric types."
+    difficulty: medium
+  - id: task3
+    name: "Task 3: Contextual Imputation"
+    description: "Impute missing values based on context and normalize text."
+    difficulty: hard
