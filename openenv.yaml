@@ -8,14 +8,14 @@ port: 8000
 
 tasks:
   - id: task1
-    name: "Task 1: Basic Cleansing"
-    description: "Remove duplicates and rows with missing critical fields (id, email)."
+    name: "Task 1: Intelligent Imputation"
+    description: "Handle missing values using statistical and ML strategies (mode, mean, median, knn) based on data distributions."
     difficulty: easy
   - id: task2
-    name: "Task 2: Formatting & Type Casting"
-    description: "Standardize date formats and fix numeric types."
+    name: "Task 2: Scaling & Mathematical Transforms"
+    description: "Apply standard scalers (minmax, standard, robust, maxabs) and mathematical transformations (log1p) appropriately."
     difficulty: medium
   - id: task3
-    name: "Task 3: Contextual Imputation"
-    description: "Impute missing values based on context and normalize text."
+    name: "Task 3: Domain-Driven Feature Construction"
+    description: "Construct new features using domain logic (e.g. lifetime, recency, average order value)."
     difficulty: hard

@@ -18,7 +18,7 @@ class DataCleanTransformAction(Action):
 
     operation: str = Field(
         ..., 
-        description="The cleaning operation to perform: 'drop_duplicates', 'drop_na', 'fill_na', 'astype', 'str_replace', 'to_datetime', 'replace_map', 'impute_from_column', 'finish'"
+        description="The cleaning operation to perform: 'drop_duplicates', 'drop_na', 'fill_na', 'astype', 'str_replace', 'to_datetime', 'replace_map', 'impute_from_column', 'impute', 'scale', 'transform', 'feature_eng', 'split_column', 'finish'"
     )
     column: Optional[str] = Field(None, description="Column to apply the operation to (if applicable)")
     value: Any = Field(None, description="Value for replacement, filling, or the target type (if applicable)")

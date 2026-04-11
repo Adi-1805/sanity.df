@@ -1,5 +1,5 @@
 ---
-title: Data Clean Transform Environment Server
+title: ML-Ready Preprocessing Environment
 emoji: 🎳
 colorFrom: blue
 colorTo: gray
@@ -11,28 +11,28 @@ tags:
   - openenv
 ---
 
-# Data Clean Transform Environment
+# AI ML-Ready Preprocessing Environment
 
-A realistic OpenEnv environment that simulates a data engineering pipeline. AI Agents are assigned tasks to clean, validate, and standardize messy data using structured Pandas-style operations.
+A realistic OpenEnv environment that simulates a data science preprocessing pipeline. AI Agents are assigned tasks to clean, scale, impute, and engineer features using structured ML operations.
 
 ## Supported Tasks
 
 This environment exposes 3 datasets corresponding to different difficulties. Switch between tasks by setting the `TASK_ID` environment variable before running the FastAPI server.
 
-### Task 1: Basic Cleansing (Easy)
-- **Status**: Fully completed and tested. `inference.py` scores 1.0.
-- **Goal**: Drop duplicates and handle missing critical fields gracefully without deleting valid non-critical rows.
-- **Actions Allowed**: `drop_duplicates` and `drop_na`
+### Task 1: Intelligent Imputation (Easy)
+- **Goal**: Handle missing values and mixed types logically.
+- **Challenges**: The agent must look at the statistical summary (e.g., skewness, outliers) to decide whether to use mean, median, mode, or KNN imputation.
+- **Actions Allowed**: `impute`, `split_column`
 
-### Task 2: Formatting & Type Casting (Medium)
-- **Status**: Fully completed and tested. `inference.py` is capable of solving this.
-- **Goal**: Clean messy currency strings (e.g., `$1,200.50` -> `1200.50` float) and standardize scattered date formats.
-- **Actions Allowed**: `str_replace`, `astype`, `to_datetime`
+### Task 2: Scaling & Mathematical Transforms (Medium)
+- **Goal**: Standardize and normalize various features.
+- **Challenges**: Requires detecting distributions (uniform, normal, skewed, sparse) and applying the correct scaler (minmax, standard, robust, maxabs) or mathematical transformation (log1p).
+- **Actions Allowed**: `scale`, `transform`
 
-### Task 3: Contextual Imputation (Hard)
-- **Status**: Fully completed and tested. `inference.py` achieves 1.0!
-- **Goal**: Resolve formatting inconsistencies (e.g., `NY`, `N.Y.` -> `New York`) and impute missing city/state mapping data contextually using standard zipcodes.
-- **Actions Allowed**: `replace_map`, `impute_from_column`
+### Task 3: Domain-Driven Feature Construction (Hard)
+- **Goal**: Construct new features logically.
+- **Challenges**: Given an e-commerce dataset, build semantic features like 'age_at_signup', 'days_since_last_purchase', 'average_order_value', and 'customer_lifetime' while properly handling `NaN`s or division by zero.
+- **Actions Allowed**: `feature_eng`
 
 ## Quick Start
 
@@ -68,16 +68,16 @@ uv run python inference.py
 
 ### Action
 **DataCleanTransformAction**: Model defining structured JSON actions
-- `operation` (str) - The operation string (e.g., `drop_duplicates`, `str_replace`, `finish`)
+- `operation` (str) - The operation string (e.g., `impute`, `scale`, `feature_eng`, `finish`)
 - `column` (str) - The target column 
 - `value` (any) - Values like `target_type` or imputation strategies
-- `kwargs` (dict) - Keyword arguments for Pandas methods (e.g., `subset`, `pat`, `repl`)
+- `kwargs` (dict) - Keyword arguments for Pandas/Sklearn methods (e.g., `strategy`, `method`)
 
 ### Observation
 **DataCleanTransformObservation**: Returns environmental progress signals
 - `current_task` (str) - Task ID loaded
 - `task_description` (str) - Prompt string detailing the AI goal
 - `dataset_head` (str) - Text rendering of `df.head(10)`
-- `dataset_info` (str) - Text rendering of `df.info()`
-- `last_action_feedback` (str) - Logs whether rows were deleted or modified
-- `reward` (float) - 0.0 -> 1.0 progress tracking
+- `dataset_info` (str) - Text rendering of `df.info()` combined with `df.describe()` for statistical context
+- `last_action_feedback` (str) - Logs whether rows were modified or scaled correctly
+- `reward` (float) - strictly normalized 0.01 -> 0.99 progress tracking based on semantic matching against a hidden "Gold" dataset.

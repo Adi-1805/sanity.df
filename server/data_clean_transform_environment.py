@@ -5,12 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Data Clean Transform Environment Implementation.
+Data Clean Transform Environment Implementation (ML-Ready Preprocessing).
 """
 
 import os
 import io
 import pandas as pd
+import numpy as np
 from uuid import uuid4
 from typing import Any, Dict, List, Optional
 
@@ -25,7 +26,7 @@ except ImportError:
 
 class DataCleanTransformEnvironment(Environment):
     """
-    An environment for simulating data cleaning and transformation tasks.
+    An environment for simulating data cleaning and preprocessing tasks.
     """
 
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
@@ -34,6 +35,7 @@ class DataCleanTransformEnvironment(Environment):
         """Initialize the data_clean_transform environment."""
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self.df: Optional[pd.DataFrame] = None
+        self.df_gold: Optional[pd.DataFrame] = None
         self.current_task_name: str = ""
         # Use environment variable if set (e.g., in Docker), otherwise use relative path
         self.data_dir = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
@@ -41,22 +43,24 @@ class DataCleanTransformEnvironment(Environment):
         # Load tasks configuration
         self.tasks = {
             "task1": {
-                "name": "Task 1: Basic Cleansing",
-                "dataset": "task1_messy.csv",
-                "description": "Clean the dataset by dropping all duplicate rows, and identifying/dropping rows that are entirely invalid (e.g. missing both id and email). Do not drop rows that are just missing non-critical fields like city."
+                "name": "Task 1: Intelligent Imputation",
+                "dataset_messy": "task1_messy.csv",
+                "dataset_gold": "task1_gold.csv",
+                "description": "Handle missing and mixed values. Split 'product_code' into 'product_category' and 'product_id'. Impute 'color' with Mode, 'weight_kg' with Mean, 'income_usd' with Median, and 'house_price' using KNN or regression on 'sqft'."
             },
             "task2": {
-                "name": "Task 2: Formatting & Type Casting",
-                "dataset": "task2_messy.csv",
-                "description": "Format date strings in the 'date_joined' column to a standard datetime format, and clean/typecast the messy 'salary' strings to standard floats."
+                "name": "Task 2: Scaling & Mathematical Transforms",
+                "dataset_messy": "task2_messy.csv",
+                "dataset_gold": "task2_gold.csv",
+                "description": "Apply standard scalers. 'age' needs MinMax, 'sensor_reading' needs StandardScaler, 'stock_volume' needs RobustScaler, 'sparse_audio_signal' needs MaxAbsScaler, and 'engagement_time' needs Log Transformation (np.log1p)."
             },
             "task3": {
-                "name": "Task 3: Contextual Imputation",
-                "dataset": "task3_messy.csv",
-                "description": "Perform contextual imputation. Impute missing 'state' values based on the 'zipcode' or 'city' context, and normalize 'city' names logically (e.g., 'N.Y.' or 'ny' to 'New York', 'L.A.' to 'Los Angeles')."
+                "name": "Task 3: Domain-Driven Feature Construction",
+                "dataset_messy": "task3_messy.csv",
+                "dataset_gold": "task3_gold.csv",
+                "description": "Construct new features. Create 'age_at_signup' (years), 'days_since_last_purchase' (assume current date is 2025-01-01), 'average_order_value' (total_spent / total_orders), and 'customer_lifetime' (days). Handle missing/zero values carefully."
             }
         }
-        self.initial_errors: Dict[str, int] = {}
 
     def reset(self, task_id: Optional[str] = None) -> DataCleanTransformObservation:
         """
@@ -65,7 +69,6 @@ class DataCleanTransformEnvironment(Environment):
         self._state = State(episode_id=str(uuid4()), step_count=0)
         
         # Priority: 1. Passed task_id, 2. Env var (refreshed), 3. Current, 4. task1
-        import os
         os_task_id = os.environ.get("TASK_ID")
         self.current_task_name = task_id or os_task_id or self.current_task_name or "task1"
         
@@ -74,40 +77,19 @@ class DataCleanTransformEnvironment(Environment):
             
         task_info = self.tasks[self.current_task_name]
         
-        dataset_path = os.path.join(self.data_dir, task_info["dataset"])
-        self.df = pd.read_csv(dataset_path)
+        messy_path = os.path.join(self.data_dir, task_info["dataset_messy"])
+        gold_path = os.path.join(self.data_dir, task_info["dataset_gold"])
         
-        # Calculate baseline errors for continuous grading
-        self._calculate_baseline_errors()
+        self.df = pd.read_csv(messy_path)
+        self.df_gold = pd.read_csv(gold_path)
+        
+        # For dates in Task 3, parse them properly
+        if self.current_task_name == "task3":
+            for col in ['user_birthdate', 'account_created_date', 'last_purchase_date']:
+                self.df[col] = pd.to_datetime(self.df[col])
+                self.df_gold[col] = pd.to_datetime(self.df_gold[col])
         
         return self._make_observation("Environment reset and dataset loaded.")
-
-    def _calculate_baseline_errors(self):
-        """Analyze initial dataset to set baselines for continuous grading."""
-        df = self.df
-        errors = {}
-        if self.current_task_name == "task1":
-            errors["duplicates"] = df.duplicated().sum()
-            errors["missing_critical"] = df[["id", "email"]].isna().any(axis=1).sum()
-        elif self.current_task_name == "task2":
-            errors["messy_salary"] = len(df) - pd.to_numeric(df["salary"].astype(str).str.replace(r"[\$,\s\€\£\¥]", "", regex=True), errors="coerce").notna().sum()
-            errors["messy_date"] = len(df) - pd.to_datetime(df["date_joined"], errors="coerce", format="mixed").notna().sum()
-        elif self.current_task_name == "task3":
-            valid_cities = {"New York", "Los Angeles"}
-            errors["messy_city"] = len(df) - df["city"].isin(valid_cities).sum()
-            errors["missing_state"] = df["state"].isna().sum()
-            
-        self.initial_errors = errors
-
-    def _clamp_score(self, score: float) -> float:
-        ranges = {
-            "task1": (0.05, 0.98),
-            "task2": (0.05, 0.97),
-            "task3": (0.05, 0.95)
-        }
-        low, high = ranges.get(self.current_task_name, (0.05, 0.95))
-        clamped = min(1.0, max(0.0, score))
-        return low + (clamped * (high - low))
 
     def step(self, action: DataCleanTransformAction) -> DataCleanTransformObservation:  # type: ignore[override]
         """
@@ -116,7 +98,7 @@ class DataCleanTransformEnvironment(Environment):
         self._state.step_count += 1
         
         if self.df is None:
-            return self._make_observation("Error: Environment not reset.", reward=0.0)
+            return self._make_observation("Error: Environment not reset.", reward=0.01)
 
         df = self.df
 
@@ -125,33 +107,120 @@ class DataCleanTransformEnvironment(Environment):
         
         try:
             if action.operation == "drop_duplicates":
-                before = len(df)
                 subset = action.kwargs.get("subset")
                 df.drop_duplicates(subset=subset, inplace=True)
-                after = len(df)
-                feedback = f"Dropped {before - after} duplicates."
+                feedback = "Dropped duplicates."
                 
             elif action.operation == "drop_na":
-                before = len(df)
                 subset = action.kwargs.get("subset")
                 df.dropna(subset=subset, inplace=True)
-                after = len(df)
-                feedback = f"Dropped {before - after} rows with missing values."
+                feedback = "Dropped rows with missing values. (Warning: This may incur penalties!)"
                 
             elif action.operation == "fill_na":
                 col = action.column
                 val = action.value
                 if col in df.columns:
                     df[col] = df[col].fillna(val)
-                    feedback = f"Filled missing values in column '{col}' with '{val}'."
+                    feedback = f"Filled missing values in '{col}' with '{val}'."
+                else:
+                    feedback = f"Error: Column '{col}' not found."
+
+            elif action.operation == "impute":
+                col = action.column
+                strategy = action.kwargs.get("strategy", "mean") # 'mean', 'median', 'mode', 'knn'
+                if strategy == "knn":
+                    from sklearn.impute import KNNImputer
+                    n_neighbors = action.kwargs.get("n_neighbors", 5)
+                    imputer = KNNImputer(n_neighbors=n_neighbors)
+                    cols = action.kwargs.get("cols", df.select_dtypes(include=[np.number]).columns)
+                    df[cols] = imputer.fit_transform(df[cols])
+                    feedback = f"Applied KNN Imputation to columns: {cols}."
+                elif col in df.columns:
+                    if strategy == "mean":
+                        df[col] = df[col].fillna(df[col].mean())
+                    elif strategy == "median":
+                        df[col] = df[col].fillna(df[col].median())
+                    elif strategy == "mode":
+                        df[col] = df[col].fillna(df[col].mode()[0])
+                    feedback = f"Imputed '{col}' using {strategy}."
                 else:
                     feedback = f"Error: Column '{col}' not found."
                     
+            elif action.operation == "scale":
+                from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler, MaxAbsScaler
+                col = action.column
+                method = action.kwargs.get("method", "standard")
+                
+                scalers = {
+                    "minmax": MinMaxScaler,
+                    "standard": StandardScaler,
+                    "robust": RobustScaler,
+                    "maxabs": MaxAbsScaler
+                }
+                if method in scalers and col in df.columns:
+                    scaler = scalers[method]()
+                    df[col] = scaler.fit_transform(df[[col]])
+                    feedback = f"Scaled '{col}' using {method}."
+                else:
+                    feedback = f"Error: Invalid column or method '{method}'."
+
+            elif action.operation == "transform":
+                col = action.column
+                method = action.kwargs.get("method", "log1p")
+                if col in df.columns:
+                    if method == "log1p":
+                        df[col] = np.log1p(df[col])
+                    elif method == "log":
+                        df[col] = np.log(df[col])
+                    feedback = f"Applied {method} transform to '{col}'."
+                else:
+                    feedback = f"Error: Column '{col}' not found."
+                    
+            elif action.operation == "feature_eng":
+                # A safe eval alternative for specific feature engineering
+                new_col = action.column
+                formula = action.kwargs.get("formula")
+                
+                try:
+                    try:
+                        # Attempt standard pandas eval
+                        df.eval(f"{new_col} = {formula}", inplace=True)
+                    except Exception:
+                        # Fallback for complex datetime/function operations not supported by df.eval
+                        env_globals = {"pd": pd, "np": np, "df": df}
+                        env_locals = {col: df[col] for col in df.columns}
+                        df[new_col] = eval(formula, env_globals, env_locals)
+                    feedback = f"Constructed feature '{new_col}' using formula '{formula}'."
+                except Exception as e:
+                    feedback = f"Error constructing feature '{new_col}': {e}"
+            
+            elif action.operation == "split_column":
+                col = action.column
+                pat = action.kwargs.get("pat", " ")
+                new_cols = action.kwargs.get("new_cols", [])
+                
+                if col in df.columns and len(new_cols) > 0:
+                    # Simple regex or str split
+                    import re
+                    # E.g., separating letters and numbers: pat = r"([A-Za-z]+)[-]?([0-9]+)"
+                    extracted = df[col].astype(str).str.extract(pat)
+                    for i, new_col in enumerate(new_cols):
+                        if i < len(extracted.columns):
+                            df[new_col] = extracted[i]
+                    df.drop(columns=[col], inplace=True)
+                    feedback = f"Split column '{col}' into {new_cols} and dropped original."
+                else:
+                    feedback = f"Error: Failed to split column '{col}'."
+
             elif action.operation == "astype":
                 col = action.column
                 target_type = action.value
                 if col in df.columns:
-                    df[col] = df[col].astype(target_type)
+                    # special case for datetime since eval/astype has limits
+                    if "datetime" in str(target_type):
+                        df[col] = pd.to_datetime(df[col])
+                    else:
+                        df[col] = df[col].astype(target_type)
                     feedback = f"Converted column '{col}' to {target_type}."
                 else:
                     feedback = f"Error: Column '{col}' not found."
@@ -166,36 +235,7 @@ class DataCleanTransformEnvironment(Environment):
                     feedback = f"Replaced pattern '{pat}' with '{repl}' in column '{col}'."
                 else:
                     feedback = f"Error: Column '{col}' not found."
-            
-            elif action.operation == "to_datetime":
-                col = action.column
-                kwargs = action.kwargs
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], **kwargs)
-                    feedback = f"Converted column '{col}' to datetime."
-                else:
-                    feedback = f"Error: Column '{col}' not found."
                     
-            elif action.operation == "replace_map":
-                col = action.column
-                mapping = action.kwargs.get("mapping")
-                if col in df.columns and isinstance(mapping, dict):
-                    df[col] = df[col].replace(mapping)
-                    feedback = f"Replaced values in '{col}' according to mapping."
-                else:
-                    feedback = f"Error: Column '{col}' not found or mapping is not a dictionary."
-                    
-            elif action.operation == "impute_from_column":
-                col = action.column
-                source_col = action.kwargs.get("source_column")
-                mapping = action.kwargs.get("mapping")
-                if col in df.columns and source_col in df.columns and isinstance(mapping, dict):
-                    # fill only missing values in col
-                    df[col] = df[col].fillna(df[source_col].map(mapping))
-                    feedback = f"Imputed missing values in '{col}' using mapping from '{source_col}'."
-                else:
-                    feedback = f"Error: Invalid columns or mapping."
-
             elif action.operation == "finish":
                 done = True
                 feedback = "Transformation finished. Evaluating results..."
@@ -215,86 +255,169 @@ class DataCleanTransformEnvironment(Environment):
 
         return self._make_observation(feedback, reward=reward, done=done)
 
+    def _normalize_score(self, raw_score: float) -> float:
+        """
+        Hackathon strict requirement: Score must be normalized strictly between 0.0 and 1.0
+        We map [0.0, 1.0] to [0.01, 0.99].
+        """
+        clamped = max(0.0, min(1.0, raw_score))
+        return 0.01 + (clamped * 0.98)
+
     def _calculate_reward(self) -> tuple[float, str]:
         """
         Calculate continuous partial reward based on progress toward the goal.
         """
-        if self.df is None:
-            return self._clamp_score(0.0), ""
+        if self.df is None or self.df_gold is None:
+            return self._normalize_score(0.0), ""
             
         df = self.df
-        errors = self.initial_errors
+        gold = self.df_gold
+        score = 0.0
             
         if self.current_task_name == "task1":
-            # Continuous: (duplicates_fixed / init_duplicates) * 0.4 + (nulls_fixed / init_nulls) * 0.6
-            curr_dupes = df.duplicated().sum()
-            curr_nulls = df[["id", "email"]].isna().any(axis=1).sum()
+            # Max score 1.0. 20% each for: product_code, color, weight_kg, income_usd, house_price
             
-            init_dupes = max(1, errors.get("duplicates", 0))
-            init_nulls = max(1, errors.get("missing_critical", 0))
+            # 1. product_code -> product_category & product_id
+            if 'product_category' in df.columns and 'product_id' in df.columns:
+                try:
+                    df_pid = pd.to_numeric(df['product_id'], errors='coerce')
+                    cat_match = (df['product_category'] == gold['product_category']).sum() / len(gold)
+                    id_match = (df_pid == gold['product_id']).sum() / len(gold)
+                    score += 0.20 * ((cat_match + id_match) / 2)
+                except:
+                    pass
             
-            dupe_reward = max(0, 1 - (curr_dupes / init_dupes)) * 0.4
-            null_reward = max(0, 1 - (curr_nulls / init_nulls)) * 0.6
-            
-            score = dupe_reward + null_reward
-            
-            clamped_score = self._clamp_score(score)
-            return clamped_score, f"Current progress score: {clamped_score:.2f}"
-            
-        elif self.current_task_name == "task2":
-            # Continuous: % of columns correctly typed/formatted
-            curr_messy_salary = len(df) - pd.to_numeric(df["salary"].astype(str).str.replace(r"[\$,\s\€\£\¥]", "", regex=True), errors="coerce").notna().sum()
-            
-            try:
-                if pd.api.types.is_datetime64_any_dtype(df["date_joined"]):
-                    curr_messy_date = 0
-                else:
-                    curr_messy_date = len(df) - pd.to_datetime(df["date_joined"], errors="coerce", format="mixed").notna().sum()
-            except:
-                curr_messy_date = len(df)
+            # 2. color (Mode Imputed)
+            if 'color' in df.columns:
+                match = (df['color'] == gold['color']).sum() / len(gold)
+                score += 0.20 * match
+                
+            # 3. weight_kg (Mean Imputed)
+            if 'weight_kg' in df.columns:
+                try:
+                    df_w = pd.to_numeric(df['weight_kg'])
+                    # close enough due to float precision
+                    match = np.isclose(df_w, gold['weight_kg'], rtol=1e-3, atol=1).sum() / len(gold)
+                    score += 0.20 * match
+                except:
+                    pass
+                    
+            # 4. income_usd (Median Imputed)
+            if 'income_usd' in df.columns:
+                try:
+                    df_i = pd.to_numeric(df['income_usd'])
+                    match = np.isclose(df_i, gold['income_usd'], rtol=1e-3, atol=1).sum() / len(gold)
+                    score += 0.20 * match
+                except:
+                    pass
+                    
+            # 5. house_price (KNN Imputed)
+            if 'house_price' in df.columns:
+                try:
+                    df_h = pd.to_numeric(df['house_price'])
+                    match = np.isclose(df_h, gold['house_price'], rtol=1e-3, atol=1).sum() / len(gold)
+                    score += 0.20 * match
+                except:
+                    pass
 
-            init_salary = max(1, errors.get("messy_salary", 0))
-            init_date = max(1, errors.get("messy_date", 0))
-            
-            salary_reward = max(0, 1 - (curr_messy_salary / init_salary)) * 0.5
-            date_reward = max(0, 1 - (curr_messy_date / init_date)) * 0.5
-            
-            score = salary_reward + date_reward
-            clamped_score = self._clamp_score(score)
-            return clamped_score, f"Current progress score: {clamped_score:.2f}"
-            
+        elif self.current_task_name == "task2":
+            # 5 columns, 20% each
+            if 'age' in df.columns:
+                try:
+                    if np.isclose(df['age'].min(), 0) and np.isclose(df['age'].max(), 1):
+                        score += 0.20
+                except: pass
+                
+            if 'sensor_reading' in df.columns:
+                try:
+                    if np.isclose(df['sensor_reading'].mean(), 0, atol=1e-2) and np.isclose(df['sensor_reading'].std(ddof=0), 1, atol=1e-2):
+                        score += 0.20
+                except: pass
+                
+            if 'stock_volume' in df.columns:
+                # Robust Scaler checks
+                try:
+                    q75, q25 = np.percentile(df['stock_volume'], [75, 25])
+                    iqr = q75 - q25
+                    if np.isclose(df['stock_volume'].median(), 0, atol=1e-2) and np.isclose(iqr, 1.0, atol=1e-2):
+                        score += 0.20
+                except: pass
+                
+            if 'sparse_audio_signal' in df.columns:
+                # MaxAbs Scaler checks
+                try:
+                    if np.isclose(np.max(np.abs(df['sparse_audio_signal'])), 1.0) and (df['sparse_audio_signal'] == 0).sum() > 0:
+                        score += 0.20
+                except: pass
+                
+            if 'engagement_time' in df.columns:
+                # log1p check
+                try:
+                    if np.isclose(df['engagement_time'], gold['engagement_time'], rtol=1e-2).sum() / len(gold) > 0.8:
+                        score += 0.20
+                except: pass
+
         elif self.current_task_name == "task3":
-            # Continuous: % of city/state corrected
-            valid_cities = {"New York", "Los Angeles"}
-            curr_messy_city = len(df) - df["city"].isin(valid_cities).sum()
-            curr_missing_state = df["state"].isna().sum()
+            # 4 target features, 25% each
             
-            init_city = max(1, errors.get("messy_city", 0))
-            init_state = max(1, errors.get("missing_state", 0))
+            # age_at_signup
+            if 'age_at_signup' in df.columns:
+                try:
+                    match = np.isclose(pd.to_numeric(df['age_at_signup']), gold['age_at_signup'], rtol=1e-2).sum() / len(gold)
+                    score += 0.25 * match
+                except: pass
+                
+            # days_since_last_purchase
+            if 'days_since_last_purchase' in df.columns:
+                try:
+                    match = np.isclose(pd.to_numeric(df['days_since_last_purchase']), gold['days_since_last_purchase']).sum() / len(gold)
+                    score += 0.25 * match
+                except: pass
+                
+            # average_order_value
+            if 'average_order_value' in df.columns:
+                try:
+                    match = np.isclose(pd.to_numeric(df['average_order_value']), gold['average_order_value'], rtol=1e-2).sum() / len(gold)
+                    score += 0.25 * match
+                except: pass
+                
+            # customer_lifetime
+            if 'customer_lifetime' in df.columns:
+                try:
+                    match = np.isclose(pd.to_numeric(df['customer_lifetime']), gold['customer_lifetime']).sum() / len(gold)
+                    score += 0.25 * match
+                except: pass
+
+        norm_score = self._normalize_score(score)
+        
+        # Penalties: Drop NA rows inappropriately
+        if len(df) < len(gold):
+            norm_score -= 0.1 # Penalty for dropping rows
+            norm_score = max(0.01, norm_score)
             
-            city_reward = max(0, 1 - (curr_messy_city / init_city)) * 0.5
-            state_reward = max(0, 1 - (curr_missing_state / init_state)) * 0.5
-            
-            score = city_reward + state_reward
-            clamped_score = self._clamp_score(score)
-            return clamped_score, f"Current progress score: {clamped_score:.2f}"
-            
-        return self._clamp_score(0.0), ""
+        return norm_score, f"Current progress score: {norm_score:.2f}"
 
     def _make_observation(self, feedback: str, reward: Optional[float] = None, done: bool = False) -> DataCleanTransformObservation:
         """Helper to create an observation from current state."""
         if reward is None:
-            reward = self._clamp_score(0.0)
+            reward = self._normalize_score(0.0)
         
         df = self.df
         if df is not None:
             # Get first 10 rows
             dataset_head = df.head(10).to_csv(index=False)
             
-            # Get info
+            # Get info including describe
             buffer = io.StringIO()
             df.info(buf=buffer)
-            dataset_info = buffer.getvalue()
+            info_str = buffer.getvalue()
+            
+            # Add describe for numerical columns to help the agent decide on scalers/imputation
+            try:
+                describe_str = df.describe().to_csv()
+                dataset_info = f"{info_str}\n\nStatistical Summary:\n{describe_str}"
+            except:
+                dataset_info = info_str
         else:
             dataset_head = ""
             dataset_info = "No dataset loaded."

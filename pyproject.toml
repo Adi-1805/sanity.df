@@ -20,6 +20,7 @@ dependencies = [
     "openenv-core[core]>=0.2.2",
     "pandas>=2.0.0",
     # Environment-specific dependencies
+    "scikit-learn>=1.7.2",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +32,7 @@ dev = [
 [project.scripts]
 # Server entry point - enables running via: uv run --project . server
 # or: python -m data_clean_transform.server.app
-server = "data_clean_transform.server.app:main"
+server = "server.app:main"
 
 [tool.setuptools]
 include-package-data = true

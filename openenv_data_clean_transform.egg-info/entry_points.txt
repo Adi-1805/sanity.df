@@ -1,2 +1,2 @@
 [console_scripts]
-server = data_clean_transform.server.app:main
+server = server.app:main
