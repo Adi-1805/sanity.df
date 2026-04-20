@@ -13,7 +13,7 @@ tags:
 
 # AI ML-Ready Preprocessing Environment
 
-A realistic OpenEnv environment that simulates a data science preprocessing pipeline. AI Agents are assigned tasks to clean, scale, impute, and engineer features using structured ML operations.
+A realistic OpenEnv environment that simulates a data science preprocessing pipeline using RL. AI Agents are assigned tasks to clean, scale, impute, and engineer features using structured ML operations.
 
 ## Supported Tasks
 
